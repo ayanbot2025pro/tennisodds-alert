@@ -1,99 +1,139 @@
 import requests
 import time
-import os
 import statistics
+import os
 from datetime import datetime
-from flask import Flask
-from threading import Thread
 
-# --- 1. DUMMY WEBSITE (Render ko Free rakhne ke liye) ---
-app = Flask(__name__)
+# ═══════════════════════════════════════════
+# ✅ FINAL OPTIMIZED SETTINGS (GOLDEN CONFIG)
+# ═══════════════════════════════════════════
 
-@app.route('/')
-def home():
-    return "I am alive! Boss Bot is running."
-
-def run_web_server():
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host='0.0.0.0', port=port)
-
-def start_server():
-    t = Thread(target=run_web_server)
-    t.start()
-
-# --- 2. SETTINGS (SECRETS) ---
 API_KEY = os.environ.get('ODDS_API_KEY')
 BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
 CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID')
 
-# --- CONFIGURATION ---
-MIN_BOOKMAKERS = 4
-SWING_MIN_ODDS = 1.80
-SWING_MAX_ODDS = 2.40
-SCAN_INTERVAL = 900       # 15 Minutes
-HEARTBEAT_INTERVAL = 3600 # 1 Hour
+# ✅ BEST SPORTS LIST (High Volume & High Swing)
+SPORTS = [
+    'table_tennis',       # Sabse Zyada Matches (Jackpot Sport)
+    'tennis_atp',         # Tennis Big Leagues
+    'tennis_wta',         # Tennis Big Leagues
+    'esports_csgo',       # Fast Swing
+    'esports_dota2',      # Fast Swing
+    'esports_lol'         # Fast Swing
+]
 
-SPORTS = ['table_tennis_gtt', 'tennis_atp', 'tennis_wta', 'esports_csgo', 'esports_dota2', 'esports_lol']
-BLACKLIST = ['itf', 'futures', 'm15', 'm25', 'qualifier', 'exhibition', 'friendly', 'unknown']
+# ✅ GOLDEN CRITERIA (80-95% Chance Logic)
+MIN_ODDS = 2.00           # 1.80 hata diya (Wo swing nahi deta)
+MAX_ODDS = 2.80           # Range safe rakhi (Taaki match close ho)
+MAX_GAP = 0.70            # Gap badhaya (Taaki matches miss na ho)
+MIN_BOOKMAKERS = 4        # Fake match se bachne ke liye
+MAX_VIG = 0.08            # Quality Check (Sirf acche bookies)
 
-sent_alerts = []
-last_heartbeat = time.time()
+# ✅ TOURNAMENT BLACKLIST (Kachra Hatao)
+BLACKLIST = [
+    'itf', 'futures', 'm15', 'm25', 'challenger',
+    'friendly', 'exhibition',
+    'setka', 'tt-cup', 'tt cup',
+    'tier 3', 'tier 4', 'qualifier', 'academy', 'regional',
+    'simulated', 'cyber', 'srl'
+]
 
-def is_fair_tournament(name):
-    t_name = name.lower()
-    return not any(bad in t_name for bad in BLACKLIST)
+sent_alerts = set()
+
+# ═══════════════════════════════════════════
+# Functions
+# ═══════════════════════════════════════════
+
+def is_safe_match(event_name, tournament):
+    """Check if match is safe (no fixing risk)"""
+    text = f"{event_name} {tournament}".lower()
+    for keyword in BLACKLIST:
+        if keyword in text:
+            return False
+    return True
+
+def calculate_vig(odds_list):
+    """Calculate bookmaker margin (Quality Check)"""
+    if not odds_list or len(odds_list) < 2: return 1.0
+    implied_probs = [1/odd for odd in odds_list]
+    return sum(implied_probs) - 1.0
 
 def send_telegram(message):
     try:
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-        requests.post(url, data={"chat_id": CHAT_ID, "text": message, "parse_mode": "HTML"}, timeout=10)
+        data = {"chat_id": CHAT_ID, "text": message, "parse_mode": "HTML"}
+        requests.post(url, data=data, timeout=10)
     except: pass
 
 def check_odds():
-    print(f"Scanning... {datetime.now()}")
+    print(f"🔍 Scanning for Jackpot Swings at {datetime.now().strftime('%H:%M:%S')}...")
+    matches_found = 0
+    
     for sport in SPORTS:
         try:
             url = f'https://api.the-odds-api.com/v4/sports/{sport}/odds'
             params = {'apiKey': API_KEY, 'regions': 'eu', 'markets': 'h2h', 'oddsFormat': 'decimal'}
             r = requests.get(url, params=params, timeout=10)
+            
             if r.status_code != 200: continue
             
-            for match in r.json():
+            matches = r.json()
+            for match in matches:
                 m_id = match['id']
                 if m_id in sent_alerts: continue
-                if not is_fair_tournament(match.get('sport_title', '')): continue
-                if len(match.get('bookmakers', [])) < MIN_BOOKMAKERS: continue
+                
+                # Filter 1: Tournament Safety
+                if not is_safe_match(f"{match['home_team']} {match['away_team']}", match.get('sport_title', '')): continue
+                
+                # Filter 2: Bookmaker Count
+                bookmakers = match.get('bookmakers', [])
+                if len(bookmakers) < MIN_BOOKMAKERS: continue
 
                 h_odds, a_odds = [], []
-                for b in match['bookmakers']:
+                for b in bookmakers:
                     try:
                         o = b['markets'][0]['outcomes']
-                        if len(o) == 2:
-                            h_odds.append(o[0]['price']); a_odds.append(o[1]['price'])
+                        # Map by name to be safe
+                        for outcome in o:
+                            if outcome['name'] == match['home_team']: h_odds.append(outcome['price'])
+                            elif outcome['name'] == match['away_team']: a_odds.append(outcome['price'])
                     except: continue
                 
-                if not h_odds: continue
-                avg_h, avg_a = statistics.mean(h_odds), statistics.mean(a_odds)
+                if len(h_odds) < MIN_BOOKMAKERS or len(a_odds) < MIN_BOOKMAKERS: continue
+                
+                avg_h = statistics.mean(h_odds)
+                avg_a = statistics.mean(a_odds)
 
-                if (SWING_MIN_ODDS <= avg_h <= SWING_MAX_ODDS) and (SWING_MIN_ODDS <= avg_a <= SWING_MAX_ODDS):
-                    if abs(avg_h - avg_a) <= 0.35:
-                        msg = (f"💎 <b>FREE MODE ALERT!</b> 💎\n\n"
-                               f"🏆 {sport.upper()}\n⚔️ {match['home_team']} vs {match['away_team']}\n"
-                               f"⚖️ Avg Odds: {avg_h:.2f} vs {avg_a:.2f}\n"
-                               f"✅ Verified: {len(match['bookmakers'])} Bookies")
-                        send_telegram(msg)
-                        sent_alerts.append(m_id)
-        except: continue
+                # ✅ Filter 3: The Golden Zone (2.00 to 2.80)
+                if (MIN_ODDS <= avg_h <= MAX_ODDS) and (MIN_ODDS <= avg_a <= MAX_ODDS):
+                    
+                    # ✅ Filter 4: Gap Check (Close Match)
+                    gap = abs(avg_h - avg_a)
+                    if gap <= MAX_GAP:
+                        
+                        # ✅ Filter 5: VIG Check (Quality)
+                        vig = calculate_vig([avg_h, avg_a])
+                        if vig <= MAX_VIG:
+                            
+                            msg = (f"🚀 <b>JACKPOT ALERT!</b>\n\n"
+                                   f"🏆 {sport.upper()}\n⚔️ {match['home_team']} vs {match['away_team']}\n"
+                                   f"⚖️ Odds: {avg_h:.2f} vs {avg_a:.2f}\n"
+                                   f"📊 Gap: {gap:.2f} | VIG: {vig:.3f}\n"
+                                   f"✅ Verified: {len(bookmakers)} Bookies")
+                            
+                            send_telegram(msg)
+                            sent_alerts.add(m_id)
+                            matches_found += 1
+                            print(f"✅ Alert Sent: {match['home_team']} vs {match['away_team']}")
+
+        except Exception as e:
+            print(f"Error in {sport}: {e}")
+            continue
+            
+    print(f"📈 Scan Complete. Found {matches_found} alerts.")
 
 if __name__ == "__main__":
-    # Pehle nakli server chalao
-    start_server()
-    
-    # Fir asli bot chalao
-    send_telegram("🤖 <b>BOT STARTED (FREE VERSION)</b>\nPaise bach gaye Boss! 😎")
+    send_telegram(f"🤖 <b>BOT UPDATE: GOLDEN SETTINGS ACTIVE</b>\nRange: {MIN_ODDS}-{MAX_ODDS} | Gap: {MAX_GAP} | Sports: TT+Tennis+Esports")
     while True:
         check_odds()
-        if time.time() - last_heartbeat > HEARTBEAT_INTERVAL:
-            send_telegram("🔔 <b>Boss, main Jinda hun!</b>")
-            last_heartbeat = time.time()
-        time.sleep(SCAN_INTERVAL)
+        time.sleep(600) # 10 min wait (Faster scanning)
