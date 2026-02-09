@@ -14,20 +14,20 @@ CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID')
 
 # ✅ BEST SPORTS LIST (High Volume & High Swing)
 SPORTS = [
-    'table_tennis',       # Sabse Zyada Matches (Jackpot Sport)
-    'tennis_atp',         # Tennis Big Leagues
-    'tennis_wta',         # Tennis Big Leagues
+    'table_tennis',       # Sabse Zyada Matches
+    'tennis_atp',         # Big Leagues
+    'tennis_wta',         # Big Leagues
     'esports_csgo',       # Fast Swing
     'esports_dota2',      # Fast Swing
     'esports_lol'         # Fast Swing
 ]
 
-# ✅ GOLDEN CRITERIA (80-95% Chance Logic)
-MIN_ODDS = 2.00           # 1.80 hata diya (Wo swing nahi deta)
-MAX_ODDS = 2.80           # Range safe rakhi (Taaki match close ho)
-MAX_GAP = 0.70            # Gap badhaya (Taaki matches miss na ho)
+# ✅ GOLDEN CRITERIA (85-92% Chance Logic)
+MIN_ODDS = 2.00           # 2.00 se niche swing mushkil hai
+MAX_ODDS = 2.80           # 2.80 tak hi match close rehta hai
+MAX_GAP = 0.70            # Gap badhaya taaki matches miss na hon
 MIN_BOOKMAKERS = 4        # Fake match se bachne ke liye
-MAX_VIG = 0.08            # Quality Check (Sirf acche bookies)
+MAX_VIG = 0.08            # Quality Check
 
 # ✅ TOURNAMENT BLACKLIST (Kachra Hatao)
 BLACKLIST = [
@@ -45,7 +45,6 @@ sent_alerts = set()
 # ═══════════════════════════════════════════
 
 def is_safe_match(event_name, tournament):
-    """Check if match is safe (no fixing risk)"""
     text = f"{event_name} {tournament}".lower()
     for keyword in BLACKLIST:
         if keyword in text:
@@ -53,7 +52,6 @@ def is_safe_match(event_name, tournament):
     return True
 
 def calculate_vig(odds_list):
-    """Calculate bookmaker margin (Quality Check)"""
     if not odds_list or len(odds_list) < 2: return 1.0
     implied_probs = [1/odd for odd in odds_list]
     return sum(implied_probs) - 1.0
@@ -66,8 +64,7 @@ def send_telegram(message):
     except: pass
 
 def check_odds():
-    print(f"🔍 Scanning for Jackpot Swings at {datetime.now().strftime('%H:%M:%S')}...")
-    matches_found = 0
+    print(f"Scanning at {datetime.now().strftime('%H:%M')}...")
     
     for sport in SPORTS:
         try:
@@ -93,7 +90,6 @@ def check_odds():
                 for b in bookmakers:
                     try:
                         o = b['markets'][0]['outcomes']
-                        # Map by name to be safe
                         for outcome in o:
                             if outcome['name'] == match['home_team']: h_odds.append(outcome['price'])
                             elif outcome['name'] == match['away_team']: a_odds.append(outcome['price'])
@@ -107,11 +103,11 @@ def check_odds():
                 # ✅ Filter 3: The Golden Zone (2.00 to 2.80)
                 if (MIN_ODDS <= avg_h <= MAX_ODDS) and (MIN_ODDS <= avg_a <= MAX_ODDS):
                     
-                    # ✅ Filter 4: Gap Check (Close Match)
+                    # ✅ Filter 4: Gap Check
                     gap = abs(avg_h - avg_a)
                     if gap <= MAX_GAP:
                         
-                        # ✅ Filter 5: VIG Check (Quality)
+                        # ✅ Filter 5: VIG Check
                         vig = calculate_vig([avg_h, avg_a])
                         if vig <= MAX_VIG:
                             
@@ -123,17 +119,23 @@ def check_odds():
                             
                             send_telegram(msg)
                             sent_alerts.add(m_id)
-                            matches_found += 1
-                            print(f"✅ Alert Sent: {match['home_team']} vs {match['away_team']}")
 
         except Exception as e:
-            print(f"Error in {sport}: {e}")
+            print(f"Error: {e}")
             continue
-            
-    print(f"📈 Scan Complete. Found {matches_found} alerts.")
 
 if __name__ == "__main__":
-    send_telegram(f"🤖 <b>BOT UPDATE: GOLDEN SETTINGS ACTIVE</b>\nRange: {MIN_ODDS}-{MAX_ODDS} | Gap: {MAX_GAP} | Sports: TT+Tennis+Esports")
+    # Startup Message
+    send_telegram(f"🤖 <b>BOT RESTARTED + HEARTBEAT ON</b>\nRange: {MIN_ODDS}-{MAX_ODDS} | Gap: {MAX_GAP}")
+    
+    last_heartbeat = time.time()
+    
     while True:
         check_odds()
-        time.sleep(600) # 10 min wait (Faster scanning)
+        
+        # ✅ HEARTBEAT CHECK (Har 1 Ghante Mein)
+        if time.time() - last_heartbeat > 3600:
+            send_telegram(f"🔔 <b>Boss, Main Jinda Hoon!</b>\nSab kuch sahi chal raha hai.\nTime: {datetime.now().strftime('%H:%M')}")
+            last_heartbeat = time.time()
+            
+        time.sleep(600) # 10 min wait
