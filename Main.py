@@ -3,29 +3,29 @@ import time
 import statistics
 import os
 
-# --- 1. SETTINGS (Apni Keys) ---
+# --- 1. SETTINGS (Keys Uthana) ---
 API_KEY = os.getenv("ODDS_API_KEY")
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
-# --- 2. SMART "ALAG-ALAG" CONFIG (High Accuracy & Safety) ---
+# --- 2. SMART "ALAG-ALAG" CONFIG (Best Logic) ---
 SPORTS_CONFIG = {
-    # Table Tennis: Sirf WTT aur International lo. 
-    # (Setka/Liga Pro Blocked hai neeche Blacklist mein)
+    # Table Tennis: Fast hai, thoda gap chalta hai (Setka blocked hai)
     'table_tennis': {
         'min_odds': 1.80,
         'max_odds': 2.50,
         'max_gap': 0.60,
-        'min_books': 5  # Strict Safety: 5 Bookies zaroori hain
+        'min_books': 5
     },
     
-    # Tennis: Sirf ATP/WTA (ITF/UTR Blocked hai)
+    # Tennis ATP: Strict raho
     'tennis_atp': {
         'min_odds': 1.95,
         'max_odds': 2.30,
         'max_gap': 0.35,
-        'min_books': 6  # Tennis mein fixing zyada hai, isliye 6 Bookies maange
+        'min_books': 6
     },
+    # Tennis WTA: Strict raho
     'tennis_wta': {
         'min_odds': 1.95,
         'max_odds': 2.30,
@@ -33,7 +33,7 @@ SPORTS_CONFIG = {
         'min_books': 6
     },
     
-    # Esports: Sirf Bade Tournaments
+    # Esports: Medium setting
     'esports_csgo': {
         'min_odds': 1.85,
         'max_odds': 2.40,
@@ -42,45 +42,44 @@ SPORTS_CONFIG = {
     }
 }
 
-# --- 3. THE SUPER BLACKLIST (Fixing Ka Dushman) ---
-# Ye list un sabhi leagues ko block karegi jahan fixing common hai.
+# --- 3. SUPER BLACKLIST (Kachra Hatao) ---
 BLACKLIST = [
-    # Table Tennis Kachra (Fixing Hubs)
+    # Table Tennis Fixing Hubs
     'setka', 'liga pro', 'tt cup', 'win cup', 'czech liga', 'russia', 'ukraine',
     'armenia', 'belarus', 'master tour',
     
-    # Tennis Kachra (Low Tier)
+    # Tennis Low Tier
     'itf', 'futures', 'utr', 'exhibition', 'daily', 'pro series', 
     'invitational', 'club',
     
-    # Fake/Virtual Matches
+    # Fake/Virtual
     'simulated', 'srl', 'cyber', 'virtual', 'esoccer', 'ebasketball', 
     '2k', 'fifa',
     
-    # Junior/Small Leagues
+    # Junior Leagues
     'u19', 'u21', 'youth', 'academy', 'regional', 'qualifier', 'amateur'
 ]
 
 sent_alerts = set()
 
 def is_safe(title, competition):
-    """
-    Smart Check: Kya ye match fixing wali league ka hai?
-    """
+    """Check karta hai ki match safe hai ya fixing wala"""
     full_text = (title + " " + competition).lower()
-    # Agar blacklist ka koi bhi shabd match mein hai, toh FALSE (Reject) karo
     if any(bad in full_text for bad in BLACKLIST):
         return False
     return True
 
 def send_alert(msg):
+    """Telegram par message bhejta hai"""
     try:
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
         requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
-    except: pass
+        print("✅ Message Sent to Telegram")
+    except Exception as e:
+        print(f"❌ Telegram Error: {e}")
 
 def scan():
-    # print("🔎 Scanning with Anti-Fixing Filters...")
+    print("🔎 Scanning Markets...")
     
     for sport_key, config in SPORTS_CONFIG.items():
         try:
@@ -92,6 +91,11 @@ def scan():
                 "oddsFormat": "decimal"
             }
             r = requests.get(url, params=params, timeout=10)
+            
+            if r.status_code != 200:
+                print(f"⚠️ API Error for {sport_key}: {r.status_code}")
+                continue
+                
             matches = r.json()
             
             if not isinstance(matches, list): continue
@@ -100,22 +104,21 @@ def scan():
                 match_id = match['id']
                 if match_id in sent_alerts: continue
                 
-                # --- FACTOR 1: BLACKLIST CHECK ---
+                # --- FILTER 1: BLACKLIST ---
                 sport_title = match.get('sport_title', '')
                 if not is_safe(sport_key, sport_title): 
-                    continue # Kachra match tha, fek diya
+                    continue 
                 
-                # --- FACTOR 2: BOOKMAKERS COUNT ---
+                # --- FILTER 2: BOOKMAKERS COUNT ---
                 books = match.get('bookmakers', [])
                 if len(books) < config['min_books']: 
-                    continue # Fake/Small match, reject
+                    continue 
                 
                 h_odds_list, a_odds_list = [], []
                 
                 for b in books:
                     try:
                         outcomes = b['markets'][0]['outcomes']
-                        # Naam match karke sahi odds nikalo
                         if outcomes[0]['name'] == match['home_team']:
                             h_odds_list.append(outcomes[0]['price'])
                             a_odds_list.append(outcomes[1]['price'])
@@ -129,14 +132,18 @@ def scan():
                 avg_h = statistics.mean(h_odds_list)
                 avg_a = statistics.mean(a_odds_list)
                 
-                # --- FACTOR 3: ODDS RANGE & GAP (Alag-Alag Logic) ---
+                # --- FILTER 3: ODDS RANGE & GAP ---
+                # Check Entry Gate (Min Odds)
                 if not (avg_h >= config['min_odds'] and avg_a >= config['min_odds']): continue
+                
+                # Check Exit Gate (Max Odds)
                 if not (avg_h <= config['max_odds'] and avg_a <= config['max_odds']): continue
                 
+                # Check Gap (Takkar)
                 current_gap = abs(avg_h - avg_a)
                 if current_gap > config['max_gap']: continue
                 
-                # Sab Clean Hai? Alert Bhejo!
+                # --- SEND ALERT ---
                 icon = "🏆"
                 if "tennis" in sport_key: icon = "🎾"
                 elif "table" in sport_key: icon = "🏓"
@@ -153,19 +160,21 @@ def scan():
                 send_alert(msg)
                 sent_alerts.add(match_id)
                 
-        except: pass
+        except Exception as e:
+            print(f"Error scanning {sport_key}: {e}")
+            pass
 
-# --- MAIN EXECUTION LOOP (Jinda Rehne Wala Hissa) ---
+# --- MAIN LOOP (Jinda Rehne Wala Hissa) ---
 if __name__ == "__main__":
-    # 1. Start hote hi Message Bhejo (Code Update Confirmation)
+    # 1. Start hote hi Message Bhejo
+    print("🚀 Bot Starting...")
     start_msg = (
         "🤖 **BOT UPDATED SUCCESSFULLY!**\n"
         "✅ **Mode:** Ultra-Safe (Anti-Fixing)\n"
         "✅ **Logic:** Alag-Alag Factors Active\n"
-        "🚀 **Scanning Started...**"
+        "🚀 **Scanning Started Now...**"
     )
     send_alert(start_msg)
-    print("Startup Message Sent!")
 
     last_heartbeat = time.time()
 
@@ -174,15 +183,15 @@ if __name__ == "__main__":
             # Match Scan karo
             scan()
             
-            # 2. Har 1 Ghante (3600 seconds) mein Heartbeat bhejo
+            # 2. Har 1 Ghante (3600 seconds) mein Jinda Hone ka message
             current_time = time.time()
             if current_time - last_heartbeat > 3600:
-                send_alert("🔔 **Boss, Main Jinda Hoon!** (Scanning Safe Matches...)")
+                send_alert("🔔 **Boss, Main Jinda Hoon!** (System Healthy)")
                 last_heartbeat = current_time
                 
             # 5 Minute ka rest
             time.sleep(300)
             
         except Exception as e:
-            print(f"Error in Main Loop: {e}")
+            print(f"Critical Error in Main Loop: {e}")
             time.sleep(60)
