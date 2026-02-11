@@ -8,7 +8,7 @@ API_KEY = os.getenv("ODDS_API_KEY")
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
-# --- 2. SMART "ALAG-ALAG" CONFIG ---
+# --- 2. SMART CONFIG ---
 SPORTS_CONFIG = {
     'table_tennis': {
         'min_odds': 1.80,
@@ -36,7 +36,7 @@ SPORTS_CONFIG = {
     }
 }
 
-# --- 3. SUPER BLACKLIST ---
+# --- 3. BLACKLIST ---
 BLACKLIST = [
     'setka', 'liga pro', 'tt cup', 'win cup', 'czech liga', 'russia', 'ukraine',
     'armenia', 'belarus', 'master tour',
@@ -139,7 +139,7 @@ def scan():
 if __name__ == "__main__":
     # Startup Message
     start_msg = (
-        "✅ **CODE UPDATED SUCCESSFULLY!**\n"
+        "✅ **CODE UPDATED & FIXED!**\n"
         "🛡️ **Mode:** Ultra-Safe Anti-Fixing\n"
         "🚀 **Scanning Started...**"
     )
@@ -151,10 +151,10 @@ if __name__ == "__main__":
         try:
             scan()
             
-            # Heartbeat check
+            # Heartbeat check (Har 1 ghante)
             current_time = time.time()
             if current_time - last_heartbeat > 3600:
-                send_alert("🔔 **Boss, Main Jinda Hoon!** (Code: Latest)")
+                send_alert("🔔 **Boss, Main Jinda Hoon!** (System: Healthy)")
                 last_heartbeat = current_time
                 
             time.sleep(300) 
