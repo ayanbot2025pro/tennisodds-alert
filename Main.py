@@ -3,12 +3,12 @@ import time
 import statistics
 import os
 
-# --- 1. SETTINGS ---
+# --- 1. SETTINGS (Apni Keys) ---
 API_KEY = os.getenv("ODDS_API_KEY")
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
-# --- 2. SMART CONFIG (High Accuracy & Safety) ---
+# --- 2. SMART "ALAG-ALAG" CONFIG (High Accuracy & Safety) ---
 SPORTS_CONFIG = {
     # Table Tennis: Sirf WTT aur International lo. 
     # (Setka/Liga Pro Blocked hai neeche Blacklist mein)
@@ -129,7 +129,7 @@ def scan():
                 avg_h = statistics.mean(h_odds_list)
                 avg_a = statistics.mean(a_odds_list)
                 
-                # --- FACTOR 3: ODDS RANGE & GAP ---
+                # --- FACTOR 3: ODDS RANGE & GAP (Alag-Alag Logic) ---
                 if not (avg_h >= config['min_odds'] and avg_a >= config['min_odds']): continue
                 if not (avg_h <= config['max_odds'] and avg_a <= config['max_odds']): continue
                 
@@ -155,8 +155,34 @@ def scan():
                 
         except: pass
 
+# --- MAIN EXECUTION LOOP (Jinda Rehne Wala Hissa) ---
 if __name__ == "__main__":
-    print("🛡️ Bot Started: Anti-Fixing Mode ON (Strict)")
+    # 1. Start hote hi Message Bhejo (Code Update Confirmation)
+    start_msg = (
+        "🤖 **BOT UPDATED SUCCESSFULLY!**\n"
+        "✅ **Mode:** Ultra-Safe (Anti-Fixing)\n"
+        "✅ **Logic:** Alag-Alag Factors Active\n"
+        "🚀 **Scanning Started...**"
+    )
+    send_alert(start_msg)
+    print("Startup Message Sent!")
+
+    last_heartbeat = time.time()
+
     while True:
-        scan()
-        time.sleep(300)
+        try:
+            # Match Scan karo
+            scan()
+            
+            # 2. Har 1 Ghante (3600 seconds) mein Heartbeat bhejo
+            current_time = time.time()
+            if current_time - last_heartbeat > 3600:
+                send_alert("🔔 **Boss, Main Jinda Hoon!** (Scanning Safe Matches...)")
+                last_heartbeat = current_time
+                
+            # 5 Minute ka rest
+            time.sleep(300)
+            
+        except Exception as e:
+            print(f"Error in Main Loop: {e}")
+            time.sleep(60)
