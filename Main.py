@@ -5,30 +5,23 @@ import os
 from flask import Flask
 from threading import Thread
 
-# --- 1. FAKE SERVER (Bot Ko Jinda Rakhne Ke Liye) ---
+# --- FAKE SERVER ---
 app = Flask('')
-
 @app.route('/')
 def home():
-    return "I am alive! Bot is running."
-
+    return "I am alive!"
 def run():
-    try:
-        # Render port 10000 ya 8080 expect karta hai
-        app.run(host='0.0.0.0', port=10000)
-    except:
-        pass
-
+    try: app.run(host='0.0.0.0', port=10000)
+    except: pass
 def keep_alive():
     t = Thread(target=run)
     t.start()
 
-# --- 2. SETTINGS ---
+# --- SETTINGS ---
 API_KEY = os.getenv("ODDS_API_KEY")
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
-# --- 3. CONFIG ---
 SPORTS_CONFIG = {
     'table_tennis': {'min': 1.80, 'max': 2.50, 'gap': 0.60, 'min_books': 5},
     'tennis_atp': {'min': 1.95, 'max': 2.30, 'gap': 0.35, 'min_books': 6},
@@ -36,36 +29,42 @@ SPORTS_CONFIG = {
     'esports_csgo': {'min': 1.85, 'max': 2.40, 'gap': 0.50, 'min_books': 4}
 }
 
-BLACKLIST = [
-    'setka', 'liga pro', 'tt cup', 'win cup', 'czech liga', 'russia', 'ukraine',
-    'armenia', 'belarus', 'master tour', 'itf', 'futures', 'utr', 'exhibition', 
-    'daily', 'pro series', 'invitational', 'club', 'simulated', 'srl', 'cyber', 
-    'virtual', 'esoccer', 'ebasketball', '2k', 'fifa', 'u19', 'u21', 'youth', 
-    'academy', 'regional', 'qualifier', 'amateur'
-]
-
+BLACKLIST = ['setka', 'liga pro', 'tt cup', 'itf', 'futures', 'virtual', 'cyber', 'simulated']
 sent_alerts = set()
 
 def is_safe(title, competition):
     full_text = (str(title) + " " + str(competition)).lower()
-    if any(bad in full_text for bad in BLACKLIST):
-        return False
+    if any(bad in full_text for bad in BLACKLIST): return False
     return True
 
+# --- DEBUG ALERT FUNCTION (Saboot Dikhayega) ---
 def send_alert(msg):
     try:
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-        requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
-    except: pass
+        print(f"📨 Try Sending: {msg[:20]}...") # Log mein likho
+        response = requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
+        
+        # Agar Telegram ne mana kiya, toh error chhap do
+        if response.status_code != 200:
+            print(f"❌ TELEGRAM ERROR: {response.text}")
+        else:
+            print("✅ Message Sent Successfully!")
+    except Exception as e:
+        print(f"❌ CONNECTION ERROR: {e}")
 
 def scan():
-    # print("Scanning...")
+    print(f"🔎 Scanning... (Time: {time.strftime('%H:%M')})")
     for sport_key, config in SPORTS_CONFIG.items():
         try:
             url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds"
             params = {"apiKey": API_KEY, "regions": "eu", "markets": "h2h", "oddsFormat": "decimal"}
             r = requests.get(url, params=params, timeout=10)
-            if r.status_code != 200: continue
+            
+            # Agar API Key khatam ya Error hai
+            if r.status_code != 200:
+                print(f"⚠️ API ERROR ({sport_key}): {r.status_code}")
+                continue
+                
             matches = r.json()
             if not isinstance(matches, list): continue
 
@@ -99,46 +98,23 @@ def scan():
                 if not (avg_h <= config['max_odds'] and avg_a <= config['max_odds']): continue
                 if abs(avg_h - avg_a) > config['max_gap']: continue
                 
-                icon = "🏆"
-                if "tennis" in sport_key: icon = "🎾"
-                elif "table" in sport_key: icon = "🏓"
-                elif "esports" in sport_key: icon = "🎮"
-                
-                msg = (f"{icon} **SAFE MATCH ALERT** {icon}\n\n"
-                       f"⚔️ **{match['home_team']} vs {match['away_team']}**\n"
-                       f"🏆 League: {sport_title}\n"
-                       f"📊 Odds: {avg_h:.2f} vs {avg_a:.2f}\n"
-                       f"🛡️ Verified by {len(books)} Bookies")
-                
+                msg = f"🏆 SAFE MATCH: {match['home_team']} vs {match['away_team']}"
                 send_alert(msg)
                 sent_alerts.add(match_id)
-        except: pass
+        except Exception as e:
+            print(f"Scan Error: {e}")
 
-# --- MAIN LOOP ---
 if __name__ == "__main__":
-    # 1. Fake Server Start
     keep_alive()
-    
-    # 2. Startup Message
-    start_msg = (
-        "✅ **BOT RESTARTED & FIXED!**\n"
-        "🛡️ **Status:** Online (24/7 Mode)\n"
-        "🚀 **Scanning:** Active"
-    )
-    send_alert(start_msg)
+    # Test Message Bhejo
+    send_alert("🛠️ **DEBUG MODE ON: Checking Telegram Connection...**")
     
     last_heartbeat = time.time()
-
     while True:
         try:
             scan()
-            
-            # Heartbeat check (Har 1 ghante)
-            current_time = time.time()
-            if current_time - last_heartbeat > 3600:
-                send_alert("🔔 **Boss, Main Jinda Hoon!** (Server: OK)")
-                last_heartbeat = current_time
-                
-            time.sleep(300) 
-        except:
-            time.sleep(60)
+            if time.time() - last_heartbeat > 3600:
+                send_alert("🔔 Heartbeat Check")
+                last_heartbeat = time.time()
+            time.sleep(300)
+        except: time.sleep(60)
