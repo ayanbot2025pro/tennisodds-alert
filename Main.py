@@ -5,7 +5,7 @@ import os
 from flask import Flask
 from threading import Thread
 
-# --- 1. FAKE SERVER (Render Ko Jinda Rakhne Ke Liye) ---
+# --- 1. FAKE SERVER (Bot Ko Jinda Rakhne Ke Liye) ---
 app = Flask('')
 
 @app.route('/')
@@ -13,7 +13,11 @@ def home():
     return "I am alive! Bot is running."
 
 def run():
-    app.run(host='0.0.0.0', port=8080)
+    try:
+        # Render port 10000 ya 8080 expect karta hai
+        app.run(host='0.0.0.0', port=10000)
+    except:
+        pass
 
 def keep_alive():
     t = Thread(target=run)
@@ -55,7 +59,7 @@ def send_alert(msg):
     except: pass
 
 def scan():
-    print("Scanning...")
+    # print("Scanning...")
     for sport_key, config in SPORTS_CONFIG.items():
         try:
             url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds"
@@ -112,14 +116,14 @@ def scan():
 
 # --- MAIN LOOP ---
 if __name__ == "__main__":
-    # 1. Fake Server Start Karo
+    # 1. Fake Server Start
     keep_alive()
     
     # 2. Startup Message
     start_msg = (
-        "✅ **CODE UPDATED SUCCESSFULLY!**\n"
-        "🛡️ **Mode:** Ultra-Safe + Server Fix\n"
-        "🚀 **Scanning Started...**"
+        "✅ **BOT RESTARTED & FIXED!**\n"
+        "🛡️ **Status:** Online (24/7 Mode)\n"
+        "🚀 **Scanning:** Active"
     )
     send_alert(start_msg)
     
@@ -129,10 +133,10 @@ if __name__ == "__main__":
         try:
             scan()
             
-            # Heartbeat check
+            # Heartbeat check (Har 1 ghante)
             current_time = time.time()
             if current_time - last_heartbeat > 3600:
-                send_alert("🔔 **Boss, Main Jinda Hoon!** (New Code Active)")
+                send_alert("🔔 **Boss, Main Jinda Hoon!** (Server: OK)")
                 last_heartbeat = current_time
                 
             time.sleep(300) 
