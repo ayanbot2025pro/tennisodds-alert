@@ -1,142 +1,113 @@
 import requests
 import time
-import statistics
 import os
+import threading
 from flask import Flask
-from threading import Thread
 
-# --- 1. FAKE SERVER (Free Plan Ke Liye Zaruri) ---
-app = Flask('')
+# --- CONFIGURATION (Settings) ---
+# Environment Variables se Keys uthayenge (Render me jo save kiye hain)
+API_KEY = os.environ.get("ODDS_API_KEY")
+BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
+CHAT_ID = os.environ.get("CHAT_ID")
 
-@app.route('/')
-def home():
-    return "I am alive! Free Bot is Running."
-
-def run():
-    try:
-        # Render Port 10000 expect karta hai
-        app.run(host='0.0.0.0', port=10000)
-    except Exception as e:
-        print(f"Server Error: {e}")
-
-def keep_alive():
-    t = Thread(target=run)
-    t.start()
-
-# --- 2. SETTINGS ---
-API_KEY = os.getenv("ODDS_API_KEY")
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-CHAT_ID = os.getenv("CHAT_ID")
-
-# --- 3. SPORTS CONFIGURATION ---
-SPORTS_CONFIG = {
-    'table_tennis': {'min': 1.80, 'max': 2.50, 'gap': 0.60, 'min_books': 5},
-    'tennis_atp': {'min': 1.95, 'max': 2.30, 'gap': 0.35, 'min_books': 6},
-    'tennis_wta': {'min': 1.95, 'max': 2.30, 'gap': 0.35, 'min_books': 6},
-    'esports_csgo': {'min': 1.85, 'max': 2.40, 'gap': 0.50, 'min_books': 4}
-}
-
-BLACKLIST = [
-    'setka', 'liga pro', 'tt cup', 'win cup', 'czech liga', 'russia', 'ukraine',
-    'armenia', 'belarus', 'master tour', 'itf', 'futures', 'utr', 'exhibition', 
-    'daily', 'pro series', 'invitational', 'club', 'simulated', 'srl', 'cyber', 
-    'virtual', 'esoccer', 'ebasketball', '2k', 'fifa', 'u19', 'u21', 'youth', 
-    'academy', 'regional', 'qualifier', 'amateur'
+# Constraints (Aapki shart: Dono side 2.5 se upar odds)
+MIN_ODDS = 2.5
+SPORTS = [
+    "tennis_atp", 
+    "tennis_wta", 
+    "tennis_challenger", 
+    "table_tennis_setka_cup" 
+    # Aur sports add kar sakte hain comma lagake
 ]
 
-sent_alerts = set()
+app = Flask(__name__)
 
-def is_safe(title, competition):
-    full_text = (str(title) + " " + str(competition)).lower()
-    if any(bad in full_text for bad in BLACKLIST):
-        return False
-    return True
-
-# --- 4. ALERT SENDER (Timeout Fix Ke Saath) ---
-def send_alert(msg):
+# --- TELEGRAM FUNCTION ---
+def send_telegram_message(message):
+    """Telegram par message bhejne ka function"""
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    payload = {"chat_id": CHAT_ID, "text": message}
     try:
-        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-        # Timeout 20s: Agar Telegram nakhre kare, toh bot atke nahi
-        requests.post(url, data={"chat_id": CHAT_ID, "text": msg}, timeout=20)
-        print("✅ Message Sent")
+        # timeout=10 isliye lagaya taki agar Telegram slow ho to bot atke nahi
+        requests.post(url, json=payload, timeout=10) 
     except Exception as e:
         print(f"❌ Telegram Error: {e}")
 
-# --- 5. SCANNING LOGIC ---
-def scan():
-    print(f"🔎 Scanning... {time.strftime('%H:%M')}")
-    for sport_key, config in SPORTS_CONFIG.items():
-        try:
-            url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds"
-            params = {"apiKey": API_KEY, "regions": "eu", "markets": "h2h", "oddsFormat": "decimal"}
-            
-            r = requests.get(url, params=params, timeout=20)
-            if r.status_code != 200:
-                print(f"⚠️ API Status: {r.status_code}")
-                continue
-                
-            matches = r.json()
-            if not isinstance(matches, list): continue
+# --- BOT BRAIN (Scanning Logic) ---
+def check_odds():
+    """Ye function odds check karega"""
+    print("🚀 Bot Started Scanning...") # Logs me dikhega
+    send_telegram_message("✅ System Live: Bot is scanning for 2.5+ Odds (Both Sides)")
 
-            for match in matches:
-                match_id = match['id']
-                if match_id in sent_alerts: continue
-                
-                sport_title = match.get('sport_title', '')
-                if not is_safe(sport_key, sport_title): continue 
-                
-                books = match.get('bookmakers', [])
-                if len(books) < config['min_books']: continue 
-                
-                h_odds, a_odds = [], []
-                for b in books:
-                    try:
-                        outcomes = b['markets'][0]['outcomes']
-                        if outcomes[0]['name'] == match['home_team']:
-                            h_odds.append(outcomes[0]['price'])
-                            a_odds.append(outcomes[1]['price'])
-                        else:
-                            h_odds.append(outcomes[1]['price'])
-                            a_odds.append(outcomes[0]['price'])
-                    except: continue
-                
-                if not h_odds: continue
-                avg_h = statistics.mean(h_odds)
-                avg_a = statistics.mean(a_odds)
-                
-                if not (avg_h >= config['min_odds'] and avg_a >= config['min_odds']): continue
-                if not (avg_h <= config['max_odds'] and avg_a <= config['max_odds']): continue
-                if abs(avg_h - avg_a) > config['max_gap']: continue
-                
-                icon = "🏆"
-                if "tennis" in sport_key: icon = "🎾"
-                elif "table" in sport_key: icon = "🏓"
-                elif "esports" in sport_key: icon = "🎮"
-                
-                msg = (f"{icon} **FREE BOT MATCH** {icon}\n\n"
-                       f"⚔️ **{match['home_team']} vs {match['away_team']}**\n"
-                       f"🏆 League: {sport_title}\n"
-                       f"📊 Odds: {avg_h:.2f} vs {avg_a:.2f}\n"
-                       f"🛡️ Books: {len(books)}\n"
-                       f"⏰ Time: {time.strftime('%H:%M')}")
-                
-                send_alert(msg)
-                sent_alerts.add(match_id)
-        except Exception as e:
-            print(f"Scan Error: {e}")
-
-# --- 6. MAIN LOOP ---
-if __name__ == "__main__":
-    # Server Start Karo
-    keep_alive()
-    
-    # Start Message
-    send_alert("🚀 **FREE BOT STARTED!**\nScanning for High Value Matches...")
-    
     while True:
         try:
-            scan()
-            time.sleep(300) # 5 Minute Wait
+            print("🔍 Scanning markets...")
+            
+            # Har Sport ke liye check karna
+            for sport in SPORTS:
+                # Odds API ko call karna
+                response = requests.get(
+                    f'https://api.the-odds-api.com/v4/sports/{sport}/odds',
+                    params={
+                        'api_key': API_KEY,
+                        'regions': 'uk,eu', # Bookmakers region
+                        'markets': 'h2h',   # Head to Head (Jeet/Haar)
+                        'oddsFormat': 'decimal'
+                    },
+                    timeout=15 
+                )
+
+                if response.status_code == 200:
+                    matches = response.json()
+                    for match in matches:
+                        # Sirf live ya upcoming matches
+                        
+                        # Bookmakers check karna
+                        for bookmaker in match.get('bookmakers', []):
+                            markets = bookmaker.get('markets', [])
+                            if not markets: continue
+                            
+                            outcomes = markets[0].get('outcomes', [])
+                            if len(outcomes) == 2:
+                                p1 = outcomes[0]
+                                p2 = outcomes[1]
+                                
+                                # --- MAIN LOGIC (2.5+ Both Sides) ---
+                                if p1['price'] >= MIN_ODDS and p2['price'] >= MIN_ODDS:
+                                    msg = (
+                                        f"🚨 **High Value Alert** 🚨\n\n"
+                                        f"🎾 **{match['sport_title']}**\n"
+                                        f"⚔️ {p1['name']} vs {p2['name']}\n"
+                                        f"💰 Odds: {p1['price']} vs {p2['price']}\n"
+                                        f"🏦 Bookie: {bookmaker['title']}\n"
+                                        f"⏰ Time: {match['commence_time']}\n\n"
+                                        f"⚠️ Note: Dono taraf high return hai."
+                                    )
+                                    print(f"Found Match: {p1['name']} vs {p2['name']}")
+                                    send_telegram_message(msg)
+                else:
+                    print(f"⚠️ API Error: {response.status_code}")
+
+            # Rate Limit bachane ke liye wait (180 seconds = 3 min)
+            # Free API me zyada tez nahi chala sakte
+            time.sleep(180) 
+
         except Exception as e:
-            print(f"Loop Error: {e}")
-            time.sleep(60)
+            print(f"❌ Error in Loop: {e}")
+            time.sleep(60) # Error aaye to 1 min ruk kar try kare
+
+# --- SERVER & THREADING SETUP ---
+# Ye sabse important part hai jo pehle missing tha
+
+# 1. Background Thread start karna
+t = threading.Thread(target=check_odds)
+t.start()
+
+# 2. Web Server (Render ko zinda rakhne ke liye)
+@app.route('/')
+def home():
+    return "Tennis 2.5 Pro Bot is Running 🟢"
+
+if __name__ == '__main__':
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
