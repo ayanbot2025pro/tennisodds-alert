@@ -26,12 +26,13 @@ TRUSTED_BOOKIES = [
 ]
 
 # ═══════════════════════════════════════════
-# 3. SPORT CONFIG (Screenshot Exact Match)
+# 3. SPORT CONFIG (Aapki Exact Screenshot Wali Settings)
 # ═══════════════════════════════════════════
 SPORTS_CONFIG = {
+    # Tennis Strict Range (1.90 - 2.30)
     'tennis_atp': {
         'min_odds': 1.90, 'max_odds': 2.30, 
-        'max_gap': 0.40,  # Tennis Strict
+        'max_gap': 0.40,  
         'min_books': 5,
         'desc': "🎾 ATP Tennis",
         'whitelist': ['atp', 'grand slam', 'masters'],
@@ -45,7 +46,7 @@ SPORTS_CONFIG = {
         'whitelist': ['wta', 'grand slam'],
         'blacklist': ['itf', '125']
     },
-    # Screenshot Logic: Table Tennis Tez hai -> Range Badi (1.80 - 2.50)
+    # Table Tennis Badi Range (1.80 - 2.50) kyunki game tez hai
     'table_tennis': {
         'min_odds': 1.80, 'max_odds': 2.50, 
         'max_gap': 0.70,  
@@ -54,7 +55,7 @@ SPORTS_CONFIG = {
         'whitelist': ['ittf', 'wtt', 'world championship', 'olympics'],
         'blacklist': ['setka', 'liga pro', 'cup']
     },
-    # Screenshot Logic: Esports Beech ka hai -> Range (1.85 - 2.40)
+    # Esports Medium Range (1.85 - 2.40)
     'esports_csgo': {
         'min_odds': 1.85, 'max_odds': 2.40,
         'max_gap': 0.55,
@@ -87,21 +88,21 @@ def is_safe(sport_key, tournament):
     return False
 
 # ═══════════════════════════════════════════
-# 5. HOURLY STATUS CHECK (Alive Message)
+# 5. ALIVE CHECKER (Har 2 Ghante)
 # ═══════════════════════════════════════════
 def alive_checker():
     while True:
-        time.sleep(3600) # 1 Hour
-        send_telegram("🟢 <b>Bot is Alive & Scanning...</b>\nNo issues found.")
+        # 20k plan hai, to alive message thoda kam bhejenge taaki quota bache
+        time.sleep(7200) # 2 Hours
+        print("🟢 Bot is still running...")
 
 # ═══════════════════════════════════════════
-# 6. MAIN SCANNER
+# 6. MAIN SCANNER (9 Minute Speed)
 # ═══════════════════════════════════════════
 def scan_market():
-    print("🚀 Bot Started...")
-    send_telegram("✅ <b>Bot Started Successfully!</b>\nSearching for Pre-Match Swings...")
+    print("🚀 Bot Started: 20k Plan Mode (9 Min Interval)")
+    send_telegram("✅ <b>Bot Active: 20k Plan Mode</b>\nSpeed: Every 9 Mins (Month Safe)")
     
-    # Start Alive Checker in background
     threading.Thread(target=alive_checker, daemon=True).start()
 
     while True:
@@ -120,7 +121,6 @@ def scan_market():
                     mid = match['id']
                     if mid in ALERTED_MATCHES: continue
                     
-                    # Safety & Time Checks
                     tournament = match.get('sport_title', '')
                     if not is_safe(sport_key, tournament): continue
                     
@@ -129,7 +129,6 @@ def scan_market():
                             continue
                     except: pass
 
-                    # Bookie & Odds Check
                     valid_books = [b for b in match['bookmakers'] if b['key'] in TRUSTED_BOOKIES]
                     if len(valid_books) < rules['min_books']: continue
 
@@ -147,7 +146,6 @@ def scan_market():
                     avg_a = statistics.median(a_odds)
                     gap = abs(avg_h - avg_a)
 
-                    # LOGIC: Screenshot Ranges
                     if (rules['min_odds'] <= avg_h <= rules['max_odds'] and 
                         rules['min_odds'] <= avg_a <= rules['max_odds'] and 
                         gap <= rules['max_gap']):
@@ -164,8 +162,10 @@ def scan_market():
                         send_telegram(msg)
                         ALERTED_MATCHES.add(mid)
 
-            print("💤 Scanning done. Waiting 5 mins...")
-            time.sleep(300)
+            # 🛑 IMPORTANT: 9 Minutes Sleep (540 Seconds)
+            # Ye setting 20,000 requests ko poora 30 din chalayegi.
+            print("💤 Waiting 9 mins (Quota Saving)...")
+            time.sleep(540)
 
         except Exception as e:
             print(f"Error: {e}")
@@ -177,7 +177,7 @@ def scan_market():
 threading.Thread(target=scan_market, daemon=True).start()
 
 @app.route('/')
-def home(): return "Tennis 2.5 Pro Active 🟢"
+def home(): return "Tennis 2.5 Pro (20k Plan) Active 🟢"
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 10000))
